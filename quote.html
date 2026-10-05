@@ -1,9 +1,10 @@
+<!-- 檔案路徑: hardware/quote-firebase.html -->
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廢五金收購價格走勢系統</title>
+    <title>廢五金收購價格走勢系統 (雲端同步版)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -24,6 +25,13 @@
         h1 {
             text-align: center;
             color: #2c3e50;
+        }
+        .status {
+            text-align: center;
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-top: -10px;
+            margin-bottom: 20px;
         }
         .input-section {
             display: flex;
@@ -53,6 +61,10 @@
         button:hover {
             background-color: #219150;
         }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
         .chart-container {
             position: relative;
             height: 50vh;
@@ -64,6 +76,7 @@
 
 <div class="container">
     <h1>📈 廢五金收購價格走勢圖</h1>
+    <div class="status" id="dbStatus">連線中...</div>
     
     <div class="input-section">
         <input type="date" id="dateInput" required>
@@ -75,8 +88,8 @@
             <option value="廢鐵">廢鐵</option>
         </select>
         <input type="number" id="priceInput" placeholder="輸入每公斤價格" step="0.1" required>
-        <button onclick="addPriceData()">新增 / 更新價格</button>
-        <button onclick="clearData()" style="background-color: #e74c3c;">清除所有資料</button>
+        <button id="addBtn">新增 / 更新價格</button>
+        <button id="clearBtn" style="background-color: #e74c3c;">清除所有資料</button>
     </div>
 
     <div class="chart-container">
@@ -84,9 +97,34 @@
     </div>
 </div>
 
-<script>
-    document.getElementById('dateInput').valueAsDate = new Date();
+<script type="module">
+    // 引入 Firebase 核心套件與 Firestore (使用 v10 模組化寫法)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, query, where, doc, updateDoc, deleteDoc, onSnapshot } 
+    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+    // ==========================================
+    // ⚠️ 請將下方的 firebaseConfig 替換成你自己的設定！
+    // ==========================================
+    const firebaseConfig = {
+        apiKey: "你的_API_KEY",
+        authDomain: "你的_PROJECT_ID.firebaseapp.com",
+        projectId: "你的_PROJECT_ID",
+        storageBucket: "你的_PROJECT_ID.appspot.com",
+        messagingSenderId: "你的_SENDER_ID",
+        appId: "你的_APP_ID"
+    };
+
+    // 初始化 Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const pricesCol = collection(db, 'scrapMetalPrices');
+
+    // 介面初始設定
+    document.getElementById('dateInput').valueAsDate = new Date();
+    const statusText = document.getElementById('dbStatus');
+    const addBtn = document.getElementById('addBtn');
+    
     const itemColors = {
         '紅銅': 'rgba(231, 76, 60, 1)',   
         '黃銅': 'rgba(241, 196, 15, 1)',  
@@ -97,16 +135,23 @@
 
     let priceChart;
 
-    function loadData() {
-        const savedData = localStorage.getItem('scrapMetalPrices');
-        return savedData ? JSON.parse(savedData) : [];
-    }
+    // 即時監聽資料庫變化 (網頁一開就會自動讀取，新增資料時也會自動更新)
+    onSnapshot(pricesCol, (snapshot) => {
+        let rawData = [];
+        snapshot.forEach((doc) => {
+            rawData.push({ id: doc.id, ...doc.data() });
+        });
+        
+        statusText.innerText = "🟢 已連線至雲端資料庫，資料已同步";
+        renderChart(rawData);
+    }, (error) => {
+        console.error("Firestore 讀取錯誤:", error);
+        statusText.innerText = "🔴 資料庫連線失敗，請檢查 Firebase 設定與權限";
+        statusText.style.color = "#e74c3c";
+    });
 
-    function saveData(data) {
-        localStorage.setItem('scrapMetalPrices', JSON.stringify(data));
-    }
-
-    function addPriceData() {
+    // 新增或更新資料功能
+    document.getElementById('addBtn').addEventListener('click', async () => {
         const date = document.getElementById('dateInput').value;
         const item = document.getElementById('itemInput').value;
         const price = parseFloat(document.getElementById('priceInput').value);
@@ -116,22 +161,57 @@
             return;
         }
 
-        let data = loadData();
-        
-        const existingIndex = data.findIndex(d => d.date === date && d.item === item);
-        if (existingIndex >= 0) {
-            data[existingIndex].price = price;
-        } else {
-            data.push({ date, item, price });
+        addBtn.disabled = true;
+        addBtn.innerText = '儲存中...';
+
+        try {
+            // 查詢這一天這個項目是否已經有資料
+            const q = query(pricesCol, where("date", "==", date), where("item", "==", item));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                // 如果已經有資料，就用覆蓋(更新)的
+                const docId = querySnapshot.docs[0].id;
+                const docRef = doc(db, 'scrapMetalPrices', docId);
+                await updateDoc(docRef, { price: price });
+            } else {
+                // 如果沒有資料，就新增
+                await addDoc(pricesCol, { date: date, item: item, price: price });
+            }
+            
+            document.getElementById('priceInput').value = ''; 
+        } catch (error) {
+            console.error("寫入錯誤:", error);
+            alert("寫入失敗！請檢查資料庫規則設定。");
+        } finally {
+            addBtn.disabled = false;
+            addBtn.innerText = '新增 / 更新價格';
         }
+    });
 
-        saveData(data);
-        renderChart();
-        document.getElementById('priceInput').value = ''; 
-    }
+    // 清除所有資料功能
+    document.getElementById('clearBtn').addEventListener('click', async () => {
+        if (confirm('⚠️ 警告：確定要清除雲端「所有」歷史價格資料嗎？此動作無法復原！')) {
+            try {
+                statusText.innerText = "🟡 刪除資料中...";
+                const querySnapshot = await getDocs(pricesCol);
+                const deletePromises = [];
+                
+                querySnapshot.forEach((document) => {
+                    deletePromises.push(deleteDoc(doc(db, 'scrapMetalPrices', document.id)));
+                });
+                
+                await Promise.all(deletePromises);
+                alert("雲端資料已全數清除！");
+            } catch (error) {
+                console.error("刪除錯誤:", error);
+                alert("刪除失敗！");
+            }
+        }
+    });
 
-    function renderChart() {
-        const rawData = loadData();
+    // 繪製與更新圖表 (跟之前的邏輯一樣，只是資料改由 onSnapshot 傳入)
+    function renderChart(rawData) {
         const dates = [...new Set(rawData.map(d => d.date))].sort();
 
         const datasets = Object.keys(itemColors).map(item => {
@@ -159,10 +239,7 @@
 
         priceChart = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: dates,
-                datasets: datasets
-            },
+            data: { labels: dates, datasets: datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -183,22 +260,11 @@
                         beginAtZero: false,
                         title: { display: true, text: '價格 (元/公斤)' }
                     },
-                    x: {
-                        title: { display: true, text: '日期' }
-                    }
+                    x: { title: { display: true, text: '日期' } }
                 }
             }
         });
     }
-
-    function clearData() {
-        if (confirm('確定要清除所有歷史價格資料嗎？此動作無法復原。')) {
-            localStorage.removeItem('scrapMetalPrices');
-            renderChart();
-        }
-    }
-
-    window.onload = renderChart;
 </script>
 
 </body>
