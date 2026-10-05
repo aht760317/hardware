@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>廢五金收購價格走勢系統</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .input-section {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            background: #eef2f5;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        input, select, button {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background-color: #219150;
+        }
+        .chart-container {
+            position: relative;
+            height: 50vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📈 廢五金收購價格走勢圖</h1>
+    
+    <div class="input-section">
+        <input type="date" id="dateInput" required>
+        <select id="itemInput">
+            <option value="紅銅">紅銅</option>
+            <option value="黃銅">黃銅</option>
+            <option value="白鐵 (不鏽鋼)">白鐵 (不鏽鋼)</option>
+            <option value="廢鋁">廢鋁</option>
+            <option value="廢鐵">廢鐵</option>
+        </select>
+        <input type="number" id="priceInput" placeholder="輸入每公斤價格" step="0.1" required>
+        <button onclick="addPriceData()">新增 / 更新價格</button>
+        <button onclick="clearData()" style="background-color: #e74c3c;">清除所有資料</button>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="priceChart"></canvas>
+    </div>
+</div>
+
+<script>
+    document.getElementById('dateInput').valueAsDate = new Date();
+
+    const itemColors = {
+        '紅銅': 'rgba(231, 76, 60, 1)',   
+        '黃銅': 'rgba(241, 196, 15, 1)',  
+        '白鐵 (不鏽鋼)': 'rgba(149, 165, 166, 1)', 
+        '廢鋁': 'rgba(52, 152, 219, 1)',  
+        '廢鐵': 'rgba(44, 62, 80, 1)'     
+    };
+
+    let priceChart;
+
+    function loadData() {
+        const savedData = localStorage.getItem('scrapMetalPrices');
+        return savedData ? JSON.parse(savedData) : [];
+    }
+
+    function saveData(data) {
+        localStorage.setItem('scrapMetalPrices', JSON.stringify(data));
+    }
+
+    function addPriceData() {
+        const date = document.getElementById('dateInput').value;
+        const item = document.getElementById('itemInput').value;
+        const price = parseFloat(document.getElementById('priceInput').value);
+
+        if (!date || !price) {
+            alert('請完整輸入日期與價格！');
+            return;
+        }
+
+        let data = loadData();
+        
+        const existingIndex = data.findIndex(d => d.date === date && d.item === item);
+        if (existingIndex >= 0) {
+            data[existingIndex].price = price;
+        } else {
+            data.push({ date, item, price });
+        }
+
+        saveData(data);
+        renderChart();
+        document.getElementById('priceInput').value = ''; 
+    }
+
+    function renderChart() {
+        const rawData = loadData();
+        const dates = [...new Set(rawData.map(d => d.date))].sort();
+
+        const datasets = Object.keys(itemColors).map(item => {
+            return {
+                label: item,
+                borderColor: itemColors[item],
+                backgroundColor: itemColors[item],
+                data: dates.map(date => {
+                    const record = rawData.find(d => d.date === date && d.item === item);
+                    return record ? record.price : null; 
+                }),
+                spanGaps: true, 
+                tension: 0.1,   
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            };
+        });
+
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        
+        if (priceChart) {
+            priceChart.destroy();
+        }
+
+        priceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y + ' 元';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: { display: true, text: '價格 (元/公斤)' }
+                    },
+                    x: {
+                        title: { display: true, text: '日期' }
+                    }
+                }
+            }
+        });
+    }
+
+    function clearData() {
+        if (confirm('確定要清除所有歷史價格資料嗎？此動作無法復原。')) {
+            localStorage.removeItem('scrapMetalPrices');
+            renderChart();
+        }
+    }
+
+    window.onload = renderChart;
+</script>
+
+</body>
+</html>
