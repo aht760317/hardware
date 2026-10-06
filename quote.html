@@ -1,10 +1,9 @@
-<!-- 檔案路徑: hardware/quote-firebase.html -->
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廢五金收購價格走勢系統 (雲端同步版)</title>
+    <title>廢五金收購價格走勢系統 (專業雲端版)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -12,99 +11,157 @@
             background-color: #f4f7f6;
             color: #333;
             margin: 0;
-            padding: 20px;
+            padding: 10px;
         }
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
-            padding: 20px 30px;
+            padding: 20px;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         h1 {
             text-align: center;
             color: #2c3e50;
+            margin-bottom: 5px;
         }
         .status {
             text-align: center;
             font-size: 14px;
             color: #7f8c8d;
-            margin-top: -10px;
             margin-bottom: 20px;
         }
-        .input-section {
+        
+        /* 頂部日期與按鈕區 */
+        .control-panel {
             display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            justify-content: center;
+            justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
+            gap: 10px;
             background: #eef2f5;
             padding: 15px;
             border-radius: 8px;
+            margin-bottom: 20px;
         }
-        input, select, button {
+        .date-picker {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        /* 價格輸入網格設計 (手機與電腦自動適應) */
+        .price-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .input-card {
+            background: #f9fbfd;
+            border: 1px solid #dcdde1;
             padding: 10px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .input-card label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .input-card input {
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #bdc3c7;
+            border-radius: 5px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        input[type="date"], button {
+            padding: 10px 15px;
             font-size: 16px;
             border: 1px solid #ccc;
             border-radius: 5px;
         }
-        button {
+        .btn-save {
             background-color: #27ae60;
             color: white;
             border: none;
             cursor: pointer;
             font-weight: bold;
+            flex-grow: 1;
             transition: background 0.3s;
         }
-        button:hover {
-            background-color: #219150;
+        .btn-save:hover { background-color: #219150; }
+        .btn-save:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        
+        .btn-clear {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
         }
-        button:disabled {
-            background-color: #95a5a6;
-            cursor: not-allowed;
-        }
+        
         .chart-container {
             position: relative;
-            height: 50vh;
+            height: 60vh;
             width: 100%;
+            margin-top: 20px;
+            border-top: 2px dashed #ecf0f1;
+            padding-top: 20px;
+        }
+
+        /* 提醒文字 */
+        .tip {
+            font-size: 13px;
+            color: #7f8c8d;
+            text-align: center;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>📈 廢五金收購價格走勢圖</h1>
+    <h1>📈 廢五金收購報價系統</h1>
     <div class="status" id="dbStatus">連線中...</div>
     
-    <div class="input-section">
-        <input type="date" id="dateInput" required>
-        <select id="itemInput">
-            <option value="紅銅">紅銅</option>
-            <option value="黃銅">黃銅</option>
-            <option value="白鐵 (不鏽鋼)">白鐵 (不鏽鋼)</option>
-            <option value="廢鋁">廢鋁</option>
-            <option value="廢鐵">廢鐵</option>
-        </select>
-        <input type="number" id="priceInput" placeholder="輸入每公斤價格" step="0.1" required>
-        <button id="addBtn">新增 / 更新價格</button>
-        <button id="clearBtn" style="background-color: #e74c3c;">清除所有資料</button>
+    <div class="control-panel">
+        <div class="date-picker">
+            📝 報價日期：
+            <input type="date" id="dateInput" required>
+        </div>
+        <div style="display: flex; gap: 10px; flex-grow: 1; max-width: 400px;">
+            <button class="btn-save" id="addBtn">💾 一鍵儲存當日價格</button>
+            <button class="btn-clear" id="clearBtn">🗑️ 清空</button>
+        </div>
+    </div>
+
+    <!-- 動態產生輸入框的容器 -->
+    <div class="price-grid" id="inputsContainer">
+        <!-- JS 會在這裡自動生成輸入框 -->
     </div>
 
     <div class="chart-container">
         <canvas id="priceChart"></canvas>
     </div>
+    <div class="tip">💡 提示：點擊圖表上方的「品項名稱」，可以隱藏或顯示該條線，方便單獨向客戶解說。</div>
 </div>
 
 <script type="module">
-    // 引入 Firebase 核心套件與 Firestore (使用 v10 模組化寫法)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, addDoc, getDocs, query, where, doc, updateDoc, deleteDoc, onSnapshot } 
     from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     // ==========================================
-    // ⚠️ 請將下方的 firebaseConfig 替換成你自己的設定！
+    // ⚠️ 請貼上你自己的 Firebase Config！
     // ==========================================
     const firebaseConfig = {
         apiKey: "你的_API_KEY",
@@ -115,102 +172,144 @@
         appId: "你的_APP_ID"
     };
 
-    // 初始化 Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const pricesCol = collection(db, 'scrapMetalPrices');
 
-    // 介面初始設定
-    document.getElementById('dateInput').valueAsDate = new Date();
-    const statusText = document.getElementById('dbStatus');
-    const addBtn = document.getElementById('addBtn');
-    
+    // === 擴充的廢五金品項與顏色 ===
     const itemColors = {
-        '紅銅': 'rgba(231, 76, 60, 1)',   
-        '黃銅': 'rgba(241, 196, 15, 1)',  
-        '白鐵 (不鏽鋼)': 'rgba(149, 165, 166, 1)', 
-        '廢鋁': 'rgba(52, 152, 219, 1)',  
-        '廢鐵': 'rgba(44, 62, 80, 1)'     
+        '特級紅銅 (清光)': '#c0392b', 
+        '一般紅銅': '#e74c3c',       
+        '黃銅': '#f1c40f',           
+        '青銅': '#d35400',           
+        '白鐵 (304)': '#95a5a6',     
+        '廢鋁 (鋁料)': '#3498db',    
+        '鋁罐': '#2980b9',           
+        '廢鐵': '#2c3e50',           
+        '廢電線 (雜線)': '#8e44ad',  
+        '廢馬達': '#16a085',         
+        '廢電瓶': '#27ae60'          
     };
 
     let priceChart;
+    let currentData = []; 
 
-    // 即時監聽資料庫變化 (網頁一開就會自動讀取，新增資料時也會自動更新)
+    // 1. 動態生成價格輸入框
+    const inputsContainer = document.getElementById('inputsContainer');
+    Object.keys(itemColors).forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'input-card';
+        card.innerHTML = `
+            <label>${item}</label>
+            <input type="number" id="input_${item}" placeholder="元/公斤" step="0.1">
+        `;
+        inputsContainer.appendChild(card);
+    });
+
+    const dateInput = document.getElementById('dateInput');
+    dateInput.valueAsDate = new Date();
+    const statusText = document.getElementById('dbStatus');
+    const addBtn = document.getElementById('addBtn');
+
+    // 2. 監聽資料庫變化
     onSnapshot(pricesCol, (snapshot) => {
-        let rawData = [];
+        currentData = [];
         snapshot.forEach((doc) => {
-            rawData.push({ id: doc.id, ...doc.data() });
+            currentData.push({ id: doc.id, ...doc.data() });
         });
         
-        statusText.innerText = "🟢 已連線至雲端資料庫，資料已同步";
-        renderChart(rawData);
+        statusText.innerText = "🟢 已連線至雲端，資料已同步";
+        renderChart(currentData);
+        fillInputsForDate(dateInput.value); 
     }, (error) => {
-        console.error("Firestore 讀取錯誤:", error);
-        statusText.innerText = "🔴 資料庫連線失敗，請檢查 Firebase 設定與權限";
+        console.error("Firestore 錯誤:", error);
+        statusText.innerText = "🔴 連線失敗，請檢查 Firebase 設定";
         statusText.style.color = "#e74c3c";
     });
 
-    // 新增或更新資料功能
-    document.getElementById('addBtn').addEventListener('click', async () => {
-        const date = document.getElementById('dateInput').value;
-        const item = document.getElementById('itemInput').value;
-        const price = parseFloat(document.getElementById('priceInput').value);
+    // 3. 根據選擇的日期，自動帶入已有的價格
+    function fillInputsForDate(selectedDate) {
+        Object.keys(itemColors).forEach(item => {
+            document.getElementById(`input_${item}`).value = '';
+        });
 
-        if (!date || !price) {
-            alert('請完整輸入日期與價格！');
-            return;
-        }
+        const dayData = currentData.filter(d => d.date === selectedDate);
+        dayData.forEach(record => {
+            const inputField = document.getElementById(`input_${record.item}`);
+            if (inputField) {
+                inputField.value = record.price;
+            }
+        });
+    }
+
+    // 監聽日期變更事件
+    dateInput.addEventListener('change', (e) => {
+        fillInputsForDate(e.target.value);
+    });
+
+    // 4. 一次性儲存所有輸入的價格
+    addBtn.addEventListener('click', async () => {
+        const date = dateInput.value;
+        if (!date) return alert('請選擇日期！');
 
         addBtn.disabled = true;
-        addBtn.innerText = '儲存中...';
+        addBtn.innerText = '💾 儲存中...';
 
         try {
-            // 查詢這一天這個項目是否已經有資料
-            const q = query(pricesCol, where("date", "==", date), where("item", "==", item));
+            const q = query(pricesCol, where("date", "==", date));
             const querySnapshot = await getDocs(q);
+            const existingDocs = {};
+            querySnapshot.forEach(doc => {
+                existingDocs[doc.data().item] = doc.id;
+            });
 
-            if (!querySnapshot.empty) {
-                // 如果已經有資料，就用覆蓋(更新)的
-                const docId = querySnapshot.docs[0].id;
-                const docRef = doc(db, 'scrapMetalPrices', docId);
-                await updateDoc(docRef, { price: price });
-            } else {
-                // 如果沒有資料，就新增
-                await addDoc(pricesCol, { date: date, item: item, price: price });
+            const promises = [];
+
+            for (const item of Object.keys(itemColors)) {
+                const inputVal = document.getElementById(`input_${item}`).value;
+                const price = parseFloat(inputVal);
+
+                if (!isNaN(price)) { 
+                    if (existingDocs[item]) {
+                        const docRef = doc(db, 'scrapMetalPrices', existingDocs[item]);
+                        promises.push(updateDoc(docRef, { price: price }));
+                    } else {
+                        promises.push(addDoc(pricesCol, { date: date, item: item, price: price }));
+                    }
+                }
             }
-            
-            document.getElementById('priceInput').value = ''; 
+
+            await Promise.all(promises);
+            alert(`✅ ${date} 的價格已成功儲存！`);
         } catch (error) {
             console.error("寫入錯誤:", error);
             alert("寫入失敗！請檢查資料庫規則設定。");
         } finally {
             addBtn.disabled = false;
-            addBtn.innerText = '新增 / 更新價格';
+            addBtn.innerText = '💾 一鍵儲存當日價格';
         }
     });
 
-    // 清除所有資料功能
+    // 清除資料
     document.getElementById('clearBtn').addEventListener('click', async () => {
-        if (confirm('⚠️ 警告：確定要清除雲端「所有」歷史價格資料嗎？此動作無法復原！')) {
+        if (confirm('⚠️️ 警告：確定要清除雲端「所有」歷史價格資料嗎？此動作無法復原！')) {
             try {
                 statusText.innerText = "🟡 刪除資料中...";
                 const querySnapshot = await getDocs(pricesCol);
                 const deletePromises = [];
-                
                 querySnapshot.forEach((document) => {
                     deletePromises.push(deleteDoc(doc(db, 'scrapMetalPrices', document.id)));
                 });
-                
                 await Promise.all(deletePromises);
                 alert("雲端資料已全數清除！");
+                fillInputsForDate(dateInput.value);
             } catch (error) {
-                console.error("刪除錯誤:", error);
                 alert("刪除失敗！");
             }
         }
     });
 
-    // 繪製與更新圖表 (跟之前的邏輯一樣，只是資料改由 onSnapshot 傳入)
+    // 5. 繪製圖表
     function renderChart(rawData) {
         const dates = [...new Set(rawData.map(d => d.date))].sort();
 
@@ -232,10 +331,7 @@
         });
 
         const ctx = document.getElementById('priceChart').getContext('2d');
-        
-        if (priceChart) {
-            priceChart.destroy();
-        }
+        if (priceChart) priceChart.destroy();
 
         priceChart = new Chart(ctx, {
             type: 'line',
@@ -244,13 +340,13 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'top' },
+                    legend: { position: 'top', labels: { usePointStyle: true } },
                     tooltip: {
                         mode: 'index',
                         intersect: false,
                         callbacks: {
                             label: function(context) {
-                                return context.dataset.label + ': ' + context.parsed.y + ' 元';
+                                return context.dataset.label + ': ' + context.parsed.y + ' 元/kg';
                             }
                         }
                     }
